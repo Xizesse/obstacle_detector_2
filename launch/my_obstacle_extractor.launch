@@ -1,0 +1,47 @@
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+
+
+def generate_launch_description():
+    return LaunchDescription([
+        # Parameters
+        DeclareLaunchArgument(
+            'use_sim_time',
+            default_value='true',
+            description='Use simulation time'
+        ),
+        
+        # Obstacle Extractor Node
+        Node(
+            package='obstacle_detector',
+            executable='obstacle_extractor_node',
+            name='obstacle_extractor',
+            parameters=[{
+                'active': True,
+                'use_scan': True,
+                'use_pcl': False,
+                'use_pcl2': False,
+                'use_split_and_merge': True,
+                'circles_from_visibles': True,
+                'discard_converted_segments': True,
+                'transform_coordinates': True,
+                'min_group_points': 10,
+                'max_group_distance': 0.1,
+                'distance_proportion': 0.00628,
+                'max_split_distance': 0.2,
+                'max_merge_separation': 0.2,
+                'max_merge_spread': 0.2,
+                'max_circle_radius': 3.6,
+                'radius_enlargement': 0.3,
+                'frame_id': 'map',
+                'use_sim_time': LaunchConfiguration('use_sim_time')
+            }],
+            remappings=[
+                # This is the correct direction for remapping:
+                # from the topic the node is looking for -> to the actual topic that exists
+                ('scan', '/scan_fixed')
+            ]
+        )
+    ])

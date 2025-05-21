@@ -80,7 +80,7 @@ void ObstacleTracker::updateParamsUtil(){
 
   nh_->get_parameter_or("active", p_active_, true);
   nh_->get_parameter_or("copy_segments", p_copy_segments_, true);
-  nh_->get_parameter_or("compensate_robot_velocity", p_compensate_robot_velocity_, false);
+  nh_->get_parameter_or("compensate_robot_velocity", p_compensate_robot_velocity_, true);
   nh_->get_parameter_or("sensor_rate", p_sensor_rate_, 10.0);
   nh_->get_parameter_or("loop_rate", p_loop_rate_, 100.0);
   nh_->get_parameter_or("frame_id", p_frame_id_, string("map"));
@@ -109,12 +109,14 @@ void ObstacleTracker::updateParamsUtil(){
       if(p_compensate_robot_velocity_){
         odom_sub_ = nh_->create_subscription<nav_msgs::msg::Odometry>(
             "/odom", 10, std::bind(&ObstacleTracker::odomCallback, this, std::placeholders::_1));
+            RCLCPP_INFO_STREAM_ONCE(nh_->get_logger(), "Using odometry topic for compensating robot velocity: " << "/odom");
       }
       obstacles_sub_ = nh_->create_subscription<obstacle_detector::msg::Obstacles>(
             "raw_obstacles", 10, std::bind(&ObstacleTracker::obstaclesCallback, this, std::placeholders::_1));
       obstacles_pub_ = nh_->create_publisher<obstacle_detector::msg::Obstacles>("tracked_obstacles", 10);
       obstacles_vis_pub_ = nh_->create_publisher<visualization_msgs::msg::MarkerArray>("tracked_obstacles_visualization", 10);
     }
+
     else {
       // Send empty message
       auto obstacles_msg = obstacle_detector::msg::Obstacles();
@@ -733,6 +735,9 @@ void ObstacleTracker::publishObstacles() {
       ob.first_velocity.y += odom_.twist.twist.linear.y + odom_.twist.twist.angular.z * distance_first * cos(angle_first);
       ob.last_velocity.x += odom_.twist.twist.linear.x - odom_.twist.twist.angular.z * distance_last * sin(angle_last);
       ob.last_velocity.y += odom_.twist.twist.linear.y + odom_.twist.twist.angular.z * distance_last * cos(angle_last);
+      //To debug print the velocity that is being compensated
+      RCLCPP_INFO(nh_->get_logger(), "Compensating velocity: %f %f", ob.first_velocity.x, ob.first_velocity.y); 
+
     }
     obstacles_.segments.push_back(ob);
   }

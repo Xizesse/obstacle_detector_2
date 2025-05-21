@@ -105,7 +105,7 @@ void ObstacleExtractor::updateParamsUtil(){
   nh_->get_parameter_or("max_split_distance", p_max_split_distance_, 0.2);
   nh_->get_parameter_or("max_merge_separation", p_max_merge_separation_, 0.2);
   nh_->get_parameter_or("max_merge_spread", p_max_merge_spread_, 0.2);
-  nh_->get_parameter_or("max_circle_radius", p_max_circle_radius_, 0.6);
+  nh_->get_parameter_or("max_circle_radius", p_max_circle_radius_, 3.6);
   nh_->get_parameter_or("radius_enlargement", p_radius_enlargement_, 0.25);
   nh_->get_parameter_or("min_x_limit", p_min_x_limit_, -10.0);
   nh_->get_parameter_or("max_x_limit", p_max_x_limit_,  10.0);
@@ -117,8 +117,11 @@ void ObstacleExtractor::updateParamsUtil(){
     if (p_active_) {
       if (p_use_scan_){
         RCLCPP_INFO_STREAM_ONCE(nh_->get_logger(), "Using LaserScan topic");
+        auto qos = rclcpp::QoS(10);
+        qos.best_effort();
+
         scan_sub_ = nh_->create_subscription<sensor_msgs::msg::LaserScan>(
-            "scan", 10, std::bind(&ObstacleExtractor::scanCallback, this, std::placeholders::_1));
+            "scan", qos, std::bind(&ObstacleExtractor::scanCallback, this, std::placeholders::_1));
       }else if (p_use_pcl_){
         RCLCPP_INFO_STREAM_ONCE(nh_->get_logger(), "Using PointCloud1 topic");
         pcl_sub_ = nh_->create_subscription<sensor_msgs::msg::PointCloud>(
