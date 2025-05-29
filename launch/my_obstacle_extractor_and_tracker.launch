@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 
 from launch import LaunchDescription
@@ -30,13 +29,14 @@ def generate_launch_description():
                 'circles_from_visibles': True,
                 'discard_converted_segments': True,
                 'transform_coordinates': True,
+                'use_world_frame': True,  # Enable world frame transformation
                 'min_group_points': 10,
                 'max_group_distance': 0.1,
                 'distance_proportion': 0.00628,
                 'max_split_distance': 0.2,
                 'max_merge_separation': 0.2,
                 'max_merge_spread': 0.2,
-                'max_circle_radius': 0.5,
+                'max_circle_radius': 5.0,
                 'radius_enlargement': 0.0,
                 'frame_id': 'lidar',
                 'use_sim_time': LaunchConfiguration('use_sim_time')
@@ -45,7 +45,8 @@ def generate_launch_description():
             remappings=[
                 ('scan', 'scan_fixed'),
                 ('pcl', '/ouster/scan'),
-                ('pcl2', '/ScanMergeNode/scan_merged')
+                ('pcl2', '/ScanMergeNode/scan_merged'),
+                ('odom', '/model/agente/odometry'),  # Map odometry topic
             ]
         ),
         
@@ -63,12 +64,13 @@ def generate_launch_description():
                 'process_variance': 0.1,
                 'process_rate_variance': 0.1,
                 'measurement_variance': 1.0,
-                'frame_id': 'lidar',
-                'compensate_robot_velocity': False,
+                'frame_id': 'map',  # Expects world frame input
+                'compensate_robot_velocity': False,  # Not needed since using world coordinates
+                'use_world_coordinates': True,  # NEW: Enable world coordinate tracking with agent output
                 'use_sim_time': LaunchConfiguration('use_sim_time')
             }],
             remappings=[
-                ('odom', '/model/agent/odometry'),
+                ('odom', '/model/agente/odometry'),  # Map odometry for transformations
                 ('tracked_obstacles', 'obstacles'),
                 ('tracked_obstacles_visualization', 'obstacles_visualization')
             ]

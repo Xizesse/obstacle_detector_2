@@ -65,8 +65,8 @@ void ObstacleTracker::updateParamsUtil(){
 
   nh_->declare_parameter("active", rclcpp::PARAMETER_BOOL);
   nh_->declare_parameter("copy_segments", rclcpp::PARAMETER_BOOL);
-  // Before using compensate_robot_velocity, consider using pointcloud input from map frame instead of base_link frame
   nh_->declare_parameter("compensate_robot_velocity", rclcpp::PARAMETER_BOOL);
+  nh_->declare_parameter("use_world_coordinates", rclcpp::PARAMETER_BOOL);  // NEW PARAMETER
   nh_->declare_parameter("sensor_rate", rclcpp::PARAMETER_DOUBLE);
   nh_->declare_parameter("loop_rate", rclcpp::PARAMETER_DOUBLE);
   nh_->declare_parameter("frame_id", rclcpp::PARAMETER_STRING);
@@ -81,6 +81,7 @@ void ObstacleTracker::updateParamsUtil(){
   nh_->get_parameter_or("active", p_active_, true);
   nh_->get_parameter_or("copy_segments", p_copy_segments_, true);
   nh_->get_parameter_or("compensate_robot_velocity", p_compensate_robot_velocity_, true);
+  nh_->get_parameter_or("use_world_coordinates", p_use_world_coordinates_, false);  // NEW
   nh_->get_parameter_or("sensor_rate", p_sensor_rate_, 10.0);
   nh_->get_parameter_or("loop_rate", p_loop_rate_, 100.0);
   nh_->get_parameter_or("frame_id", p_frame_id_, string("map"));
@@ -106,17 +107,17 @@ void ObstacleTracker::updateParamsUtil(){
 
   if (p_active_ != prev_active) {
     if (p_active_) {
-      if(p_compensate_robot_velocity_){
+      // Subscribe to odometry if using world coordinates OR compensating robot velocity
+      if(p_compensate_robot_velocity_ || p_use_world_coordinates_){
         odom_sub_ = nh_->create_subscription<nav_msgs::msg::Odometry>(
             "/odom", 10, std::bind(&ObstacleTracker::odomCallback, this, std::placeholders::_1));
-            RCLCPP_INFO_STREAM_ONCE(nh_->get_logger(), "Using odometry topic for compensating robot velocity: " << "/odom");
+            RCLCPP_INFO_STREAM_ONCE(nh_->get_logger(), "Using odometry for coordinate transformations: " << "/odom");
       }
       obstacles_sub_ = nh_->create_subscription<obstacle_detector::msg::Obstacles>(
             "raw_obstacles", 10, std::bind(&ObstacleTracker::obstaclesCallback, this, std::placeholders::_1));
       obstacles_pub_ = nh_->create_publisher<obstacle_detector::msg::Obstacles>("tracked_obstacles", 10);
       obstacles_vis_pub_ = nh_->create_publisher<visualization_msgs::msg::MarkerArray>("tracked_obstacles_visualization", 10);
     }
-
     else {
       // Send empty message
       auto obstacles_msg = obstacle_detector::msg::Obstacles();
@@ -702,50 +703,90 @@ void ObstacleTracker::updateObstacles() {
 }
 
 void ObstacleTracker::publishObstacles() {
-  auto obstacles_msg = obstacle_detector::msg::Obstacles();
+    auto obstacles_msg = obstacle_detector::msg::Obstacles();
 
-  obstacles_.circles.clear();
-  obstacles_.segments.clear();
+    obstacles_.circles.clear();
+    obstacles_.segments.clear();
 
-  for (auto& tracked_circle_obstacle : tracked_circle_obstacles_) {
-    obstacle_detector::msg::CircleObstacle ob = tracked_circle_obstacle.getObstacle();
-    ob.true_radius = ob.radius - radius_margin_;
-    // Compensate robot velocity from obstacle velocity
-    // Velocities are in robot's frame, x forward y leftwards
-    if (p_compensate_robot_velocity_)
-    {
-      double distance = sqrt(pow(ob.center.x, 2) + pow(ob.center.y, 2));
-      double angle = atan2(ob.center.y, ob.center.x);
-      ob.velocity.x += odom_.twist.twist.linear.x - odom_.twist.twist.angular.z * distance * sin(angle);
-      ob.velocity.y += odom_.twist.twist.linear.y + odom_.twist.twist.angular.z * distance * cos(angle);
+    for (auto& tracked_circle_obstacle : tracked_circle_obstacles_) {
+        obstacle_detector::msg::CircleObstacle ob = tracked_circle_obstacle.getObstacle();
+        ob.true_radius = ob.radius - radius_margin_;
+        
+        // Transform from world coordinates back to agent coordinates if using world coordinates
+        if (p_use_world_coordinates_) {
+            ob.center = transformWorldToAgent(ob.center);
+            
+            // Transform velocity from world to agent frame
+            geometry_msgs::msg::Vector3 world_vel, agent_vel;
+            world_vel.x = ob.velocity.x;
+            world_vel.y = ob.velocity.y;
+            world_vel.z = 0.0;
+            agent_vel = transformVelocityWorldToAgent(world_vel);
+            ob.velocity.x = agent_vel.x;
+            ob.velocity.y = agent_vel.y;
+        }
+        // Original velocity compensation (if not using world coordinates)
+        else if (p_compensate_robot_velocity_) {
+            double distance = sqrt(pow(ob.center.x, 2) + pow(ob.center.y, 2));
+            double angle = atan2(ob.center.y, ob.center.x);
+            ob.velocity.x += odom_.twist.twist.linear.x - odom_.twist.twist.angular.z * distance * sin(angle);
+            ob.velocity.y += odom_.twist.twist.linear.y + odom_.twist.twist.angular.z * distance * cos(angle);
+        }
+        
+        obstacles_.circles.push_back(ob);
     }
-    obstacles_.circles.push_back(ob);
-  }
-  for (auto& tracked_segment_obstacle : tracked_segment_obstacles_) {
-    obstacle_detector::msg::SegmentObstacle ob = tracked_segment_obstacle.getObstacle();
-    // Compensate robot velocity from obstacle velocity
-    // Velocities are in robot's frame, x forward y leftwards
-    if (p_compensate_robot_velocity_)
-    {
-      double distance_first = sqrt(pow(ob.first_point.x, 2) + pow(ob.first_point.y, 2));
-      double distance_last = sqrt(pow(ob.last_point.x, 2) + pow(ob.last_point.y, 2));
-      double angle_first = atan2(ob.first_point.y, ob.first_point.x);
-      double angle_last = atan2(ob.last_point.y, ob.last_point.x);
-      ob.first_velocity.x += odom_.twist.twist.linear.x - odom_.twist.twist.angular.z * distance_first * sin(angle_first);
-      ob.first_velocity.y += odom_.twist.twist.linear.y + odom_.twist.twist.angular.z * distance_first * cos(angle_first);
-      ob.last_velocity.x += odom_.twist.twist.linear.x - odom_.twist.twist.angular.z * distance_last * sin(angle_last);
-      ob.last_velocity.y += odom_.twist.twist.linear.y + odom_.twist.twist.angular.z * distance_last * cos(angle_last);
-      //To debug print the velocity that is being compensated
-      RCLCPP_INFO(nh_->get_logger(), "Compensating velocity: %f %f", ob.first_velocity.x, ob.first_velocity.y); 
-
+    
+    for (auto& tracked_segment_obstacle : tracked_segment_obstacles_) {
+        obstacle_detector::msg::SegmentObstacle ob = tracked_segment_obstacle.getObstacle();
+        
+        // Transform from world coordinates back to agent coordinates if using world coordinates
+        if (p_use_world_coordinates_) {
+            ob.first_point = transformWorldToAgent(ob.first_point);
+            ob.last_point = transformWorldToAgent(ob.last_point);
+            
+            // Transform velocities from world to agent frame
+            geometry_msgs::msg::Vector3 world_vel1, world_vel2, agent_vel1, agent_vel2;
+            world_vel1.x = ob.first_velocity.x;
+            world_vel1.y = ob.first_velocity.y;
+            world_vel1.z = 0.0;
+            world_vel2.x = ob.last_velocity.x;
+            world_vel2.y = ob.last_velocity.y;
+            world_vel2.z = 0.0;
+            
+            agent_vel1 = transformVelocityWorldToAgent(world_vel1);
+            agent_vel2 = transformVelocityWorldToAgent(world_vel2);
+            
+            ob.first_velocity.x = agent_vel1.x;
+            ob.first_velocity.y = agent_vel1.y;
+            ob.last_velocity.x = agent_vel2.x;
+            ob.last_velocity.y = agent_vel2.y;
+        }
+        // Original velocity compensation (if not using world coordinates)
+        else if (p_compensate_robot_velocity_) {
+            double distance_first = sqrt(pow(ob.first_point.x, 2) + pow(ob.first_point.y, 2));
+            double distance_last = sqrt(pow(ob.last_point.x, 2) + pow(ob.last_point.y, 2));
+            double angle_first = atan2(ob.first_point.y, ob.first_point.x);
+            double angle_last = atan2(ob.last_point.y, ob.last_point.x);
+            ob.first_velocity.x += odom_.twist.twist.linear.x - odom_.twist.twist.angular.z * distance_first * sin(angle_first);
+            ob.first_velocity.y += odom_.twist.twist.linear.y + odom_.twist.twist.angular.z * distance_first * cos(angle_first);
+            ob.last_velocity.x += odom_.twist.twist.linear.x - odom_.twist.twist.angular.z * distance_last * sin(angle_last);
+            ob.last_velocity.y += odom_.twist.twist.linear.y + odom_.twist.twist.angular.z * distance_last * cos(angle_last);
+        }
+        
+        obstacles_.segments.push_back(ob);
     }
-    obstacles_.segments.push_back(ob);
-  }
 
-  obstacles_msg = obstacles_;
-  obstacles_msg.header.stamp = nh_->get_clock()->now();
+    obstacles_msg = obstacles_;
+    obstacles_msg.header.stamp = nh_->get_clock()->now();
+    
+    // Set output frame based on whether we're transforming back to agent coordinates
+    if (p_use_world_coordinates_) {
+        obstacles_msg.header.frame_id = "lidar";  // Output in agent frame
+    } else {
+        obstacles_msg.header.frame_id = p_frame_id_;  // Use configured frame
+    }
 
-  obstacles_pub_->publish(obstacles_msg);
+    obstacles_pub_->publish(obstacles_msg);
 }
 
 
@@ -881,6 +922,42 @@ void ObstacleTracker::publishVisualizationObstacles() {
   }
   obstacles_vis_pub_->publish(obstacles_vis_msg);
 }
+
+
+geometry_msgs::msg::Point ObstacleTracker::transformWorldToAgent(const geometry_msgs::msg::Point& world_point) {
+    // Get robot pose from odometry (world frame)
+    double robot_x = odom_.pose.pose.position.x;
+    double robot_y = odom_.pose.pose.position.y;
+    double robot_yaw = 2.0 * atan2(odom_.pose.pose.orientation.z, odom_.pose.pose.orientation.w);
+    
+    // Transform point from world frame to agent frame
+    geometry_msgs::msg::Point agent_point;
+    
+    // Translate to robot origin
+    double translated_x = world_point.x - robot_x;
+    double translated_y = world_point.y - robot_y;
+    
+    // Rotate by -robot_yaw to get agent frame
+    agent_point.x = translated_x * cos(-robot_yaw) - translated_y * sin(-robot_yaw);
+    agent_point.y = translated_x * sin(-robot_yaw) + translated_y * cos(-robot_yaw);
+    agent_point.z = world_point.z;
+    
+    return agent_point;
+}
+
+geometry_msgs::msg::Vector3 ObstacleTracker::transformVelocityWorldToAgent(const geometry_msgs::msg::Vector3& world_velocity) {
+    // Get robot orientation
+    double robot_yaw = 2.0 * atan2(odom_.pose.pose.orientation.z, odom_.pose.pose.orientation.w);
+    
+    // Transform velocity from world frame to agent frame (rotation only, no translation for velocities)
+    geometry_msgs::msg::Vector3 agent_velocity;
+    agent_velocity.x = world_velocity.x * cos(-robot_yaw) - world_velocity.y * sin(-robot_yaw);
+    agent_velocity.y = world_velocity.x * sin(-robot_yaw) + world_velocity.y * cos(-robot_yaw);
+    agent_velocity.z = world_velocity.z;
+    
+    return agent_velocity;
+}
+
 
 // Ugly initialization of static members of tracked obstacles...
 int    TrackedCircleObstacle::s_fade_counter_size_     = 0;

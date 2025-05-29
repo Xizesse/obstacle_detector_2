@@ -56,6 +56,7 @@
 #include "visualization_msgs/msg/marker.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 #include "std_srvs/srv/empty.hpp"
+#include "nav_msgs/msg/odometry.hpp"
 
 #include "obstacle_detector/msg/obstacles.hpp"
 #include "obstacle_detector/msg/circle_obstacle.hpp"
@@ -79,6 +80,7 @@ private:
   void scanCallback(const sensor_msgs::msg::LaserScan& scan_msg);
   void pclCallback(const sensor_msgs::msg::PointCloud& pcl_msg);
   void pcl2Callback(sensor_msgs::msg::PointCloud2::SharedPtr pcl_msg);
+  void odomCallback(const nav_msgs::msg::Odometry::ConstSharedPtr& msg);
 
   void initialize() { std_srvs::srv::Empty empt; updateParamsUtil(); }
 
@@ -87,6 +89,9 @@ private:
   void transformObstacles();
   void publishObstacles();
   void publishVisualizationObstacles();
+
+  // New function for world frame transformation
+  geometry_msgs::msg::Point transformToWorld(const geometry_msgs::msg::Point& point);
 
   void detectSegments(const PointSet& point_set);
   void mergeSegments();
@@ -104,6 +109,7 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
   rclcpp::Subscription<sensor_msgs::msg::PointCloud>::SharedPtr pcl_sub_;
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pcl2_sub_;
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
   rclcpp::Publisher<obstacle_detector::msg::Obstacles>::SharedPtr obstacles_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr obstacles_vis_pub_;
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr params_srv_;
@@ -114,6 +120,9 @@ private:
   std::string base_frame_id_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_{nullptr};
   std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
+
+  // Odometry for world frame transformation
+  nav_msgs::msg::Odometry odom_;
 
   std::list<Point> input_points_;
   std::list<Segment> segments_;
@@ -129,6 +138,7 @@ private:
   bool p_circles_from_visibles_;
   bool p_discard_converted_segments_;
   bool p_transform_coordinates_;
+  bool p_use_world_frame_;  // New parameter
 
   int p_min_group_points_;
 

@@ -73,6 +73,7 @@ void ObstacleExtractor::updateParamsUtil(){
   nh_->declare_parameter("circles_from_visibles", rclcpp::PARAMETER_BOOL);
   nh_->declare_parameter("discard_converted_segments", rclcpp::PARAMETER_BOOL);
   nh_->declare_parameter("transform_coordinates", rclcpp::PARAMETER_BOOL);
+  nh_->declare_parameter("use_world_frame", rclcpp::PARAMETER_BOOL);  // NEW PARAMETER
 
   nh_->declare_parameter("min_group_points", rclcpp::PARAMETER_INTEGER);
 
@@ -97,6 +98,7 @@ void ObstacleExtractor::updateParamsUtil(){
   nh_->get_parameter_or("circles_from_visibles", p_circles_from_visibles_, true);
   nh_->get_parameter_or("discard_converted_segments", p_discard_converted_segments_, true);
   nh_->get_parameter_or("transform_coordinates", p_transform_coordinates_, true);
+  nh_->get_parameter_or("use_world_frame", p_use_world_frame_, false);  // NEW PARAMETER
 
   nh_->get_parameter_or("min_group_points", p_min_group_points_, 5);
 
@@ -115,6 +117,13 @@ void ObstacleExtractor::updateParamsUtil(){
 
   if (p_active_ != prev_active) {
     if (p_active_) {
+      // Add odometry subscription if using world frame
+      if (p_use_world_frame_) {
+        odom_sub_ = nh_->create_subscription<nav_msgs::msg::Odometry>(
+            "/odom", 10, std::bind(&ObstacleExtractor::odomCallback, this, std::placeholders::_1));
+        RCLCPP_INFO_STREAM_ONCE(nh_->get_logger(), "Using odometry for world frame transformation: /odom");
+      }
+      
       if (p_use_scan_){
         RCLCPP_INFO_STREAM_ONCE(nh_->get_logger(), "Using LaserScan topic");
         auto qos = rclcpp::QoS(10);
@@ -137,12 +146,13 @@ void ObstacleExtractor::updateParamsUtil(){
     else {
       // Send empty message
       auto obstacles_msg = obstacle_detector::msg::Obstacles();
-      obstacles_msg.header.frame_id = p_frame_id_;
+      obstacles_msg.header.frame_id = p_use_world_frame_ ? "world" : p_frame_id_;
       obstacles_msg.header.stamp = nh_->get_clock()->now();
       obstacles_pub_->publish(obstacles_msg);
     }
   }
 }
+
 
 void ObstacleExtractor::updateParams(const std::shared_ptr<rmw_request_id_t> request_header,
                                      const std::shared_ptr<std_srvs::srv::Empty::Request> &req, 
@@ -185,6 +195,29 @@ void ObstacleExtractor::pclCallback(const sensor_msgs::msg::PointCloud& pcl_msg)
   }
 
   processPoints();
+}
+
+void ObstacleExtractor::odomCallback(const nav_msgs::msg::Odometry::ConstSharedPtr& msg) {
+    odom_ = *msg;
+}
+
+geometry_msgs::msg::Point ObstacleExtractor::transformToWorld(const geometry_msgs::msg::Point& point) {
+    if (!p_use_world_frame_) {
+        return point;  // No transformation needed
+    }
+    
+    // Get robot pose from odometry
+    double robot_x = odom_.pose.pose.position.x;
+    double robot_y = odom_.pose.pose.position.y;
+    double robot_yaw = 2.0 * atan2(odom_.pose.pose.orientation.z, odom_.pose.pose.orientation.w);
+    
+    // Transform point from robot frame to world frame
+    geometry_msgs::msg::Point world_point;
+    world_point.x = robot_x + point.x * cos(robot_yaw) - point.y * sin(robot_yaw);
+    world_point.y = robot_y + point.x * sin(robot_yaw) + point.y * cos(robot_yaw);
+    world_point.z = point.z;
+    
+    return world_point;
 }
 
 void ObstacleExtractor::pcl2Callback(sensor_msgs::msg::PointCloud2::SharedPtr pcl_msg) {
@@ -570,28 +603,50 @@ void ObstacleExtractor::transformObstacles() {
 void ObstacleExtractor::publishObstacles() {
   auto obstacles_msg = obstacle_detector::msg::Obstacles();
   obstacles_msg.header.stamp = stamp_;
-  obstacles_msg.header.frame_id = published_obstacles_frame_id_;
+  
+  // Set frame based on whether we're using world frame transformation
+  if (p_use_world_frame_) {
+    obstacles_msg.header.frame_id = "map";
+  } else {
+    obstacles_msg.header.frame_id = published_obstacles_frame_id_;
+  }
 
   for (const Segment& s : segments_) {
     obstacle_detector::msg::SegmentObstacle segment;
-    segment.first_point.x = s.first_point.x;
-    segment.first_point.y = s.first_point.y;
-    segment.first_point.z = s.first_point.z;
-    segment.last_point.x = s.last_point.x;
-    segment.last_point.y = s.last_point.y;
-    segment.last_point.z = s.last_point.z;
+    
+    // Transform to world coordinates if enabled
+    geometry_msgs::msg::Point first_point, last_point;
+    first_point.x = s.first_point.x;
+    first_point.y = s.first_point.y;
+    first_point.z = s.first_point.z;
+    last_point.x = s.last_point.x;
+    last_point.y = s.last_point.y;
+    last_point.z = s.last_point.z;
+    
+    first_point = transformToWorld(first_point);
+    last_point = transformToWorld(last_point);
+    
+    segment.first_point = first_point;
+    segment.last_point = last_point;
 
     obstacles_msg.segments.push_back(segment);
   }
 
   for (const Circle& c : circles_) {
+    // Apply limits in the original frame (before world transformation)
     if (c.center.x > p_min_x_limit_ && c.center.x < p_max_x_limit_ &&
         c.center.y > p_min_y_limit_ && c.center.y < p_max_y_limit_) {
+        
         obstacle_detector::msg::CircleObstacle circle;
 
-        circle.center.x = c.center.x;
-        circle.center.y = c.center.y;
-        circle.center.z = c.center.z;
+        // Transform to world coordinates if enabled
+        geometry_msgs::msg::Point center;
+        center.x = c.center.x;
+        center.y = c.center.y;
+        center.z = c.center.z;
+        center = transformToWorld(center);
+        
+        circle.center = center;
         circle.velocity.x = 0.0;
         circle.velocity.y = 0.0;
         circle.radius = c.radius;

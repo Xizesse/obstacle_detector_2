@@ -92,6 +92,8 @@ private:
                      std::vector<TrackedSegmentObstacle>& new_tracked, const obstacle_detector::msg::Obstacles::ConstSharedPtr& new_obstacles);
   void fissureObstacle(const std::vector<int>& fission_indices, const std::vector<int>& row_min_indices,
                        std::vector<TrackedSegmentObstacle>& new_tracked, const obstacle_detector::msg::Obstacles::ConstSharedPtr& new_obstacles);
+  geometry_msgs::msg::Point transformWorldToAgent(const geometry_msgs::msg::Point& world_point);
+  geometry_msgs::msg::Vector3 transformVelocityWorldToAgent(const geometry_msgs::msg::Vector3& world_velocity); 
 
   void updateObstacles();
   void publishObstacles();
@@ -125,6 +127,7 @@ private:
   bool p_active_;
   bool p_copy_segments_;
   bool p_compensate_robot_velocity_;
+  bool p_use_world_coordinates_;
 
   double p_tracking_duration_;
   double p_loop_rate_;
