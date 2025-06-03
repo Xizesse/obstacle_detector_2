@@ -23,7 +23,7 @@ def generate_launch_description():
             parameters=[{
                 'active': True,
                 'use_scan': True,
-                'use_pcl': False,
+                'use_pcl': False, 
                 'use_pcl2': False,
                 'use_split_and_merge': True,
                 'circles_from_visibles': True,
@@ -37,7 +37,7 @@ def generate_launch_description():
                 'max_merge_separation': 0.2,
                 'max_merge_spread': 0.2,
                 'max_circle_radius': 5.0,
-                'radius_enlargement': 0.0,
+                'radius_enlargement': 0.3,
                 'frame_id': 'lidar',
                 'use_sim_time': LaunchConfiguration('use_sim_time')
             }],
