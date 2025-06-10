@@ -711,6 +711,9 @@ void ObstacleTracker::publishObstacles() {
     for (auto& tracked_circle_obstacle : tracked_circle_obstacles_) {
         obstacle_detector::msg::CircleObstacle ob = tracked_circle_obstacle.getObstacle();
         ob.true_radius = ob.radius - radius_margin_;
+        ob.radius_std = sqrt(tracked_circle_obstacle.getKFr().P(0, 0));
+        ob.position_x_std = sqrt(tracked_circle_obstacle.getKFx().P(0, 0));
+        ob.position_y_std = sqrt(tracked_circle_obstacle.getKFy().P(0, 0));
         
         // Transform from world coordinates back to agent coordinates if using world coordinates
         if (p_use_world_coordinates_) {

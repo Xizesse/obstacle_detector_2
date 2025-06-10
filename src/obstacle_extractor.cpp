@@ -651,6 +651,10 @@ void ObstacleExtractor::publishObstacles() {
         circle.velocity.y = 0.0;
         circle.radius = c.radius;
         circle.true_radius = c.radius - p_radius_enlargement_;
+        circle.radius_std = 0.0; // No standard deviation available
+        circle.position_x_std = 0.0;  
+        circle.position_y_std = 0.0;  
+        circle.position_z_std = 0.0;  
 
         obstacles_msg.circles.push_back(circle);
     }

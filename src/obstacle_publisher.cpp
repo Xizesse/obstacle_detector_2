@@ -119,6 +119,10 @@ void ObstaclePublisher::updateParamsUtil() {
     circle.center.y = p_y_vector_[idx];
     circle.radius = p_r_vector_[idx];
     circle.true_radius = p_r_vector_[idx] - p_radius_margin_;;
+    circle.radius_std = 0.0; // No standard deviation available
+    circle.position_x_std = 0.0;
+    circle.position_y_std = 0.0;
+    circle.position_z_std = 0.0; 
 
     circle.velocity.x = p_vx_vector_[idx];
     circle.velocity.y = p_vy_vector_[idx];
@@ -166,6 +170,7 @@ void ObstaclePublisher::fusionExample(double t) {
     circ1.center.x = -1.20 + 0.2 * t;
     circ1.center.y = 0.0;
     circ1.radius = 0.20;
+    
 
     circ2.center.x = 1.20 - 0.2 * t;
     circ2.center.y = 0.0;
@@ -185,7 +190,15 @@ void ObstaclePublisher::fusionExample(double t) {
     reset();
 
   circ1.true_radius = circ1.radius;
+  circ1.radius_std = 0.0; // No standard deviation available
+  circ1.position_x_std = 0.0;
+  circ1.position_y_std = 0.0;
+  circ1.position_z_std = 0.0;
   circ2.true_radius = circ2.radius;
+  circ2.radius_std = 0.0; // No standard deviation available
+  circ2.position_x_std = 0.0;
+  circ2.position_y_std = 0.0;
+  circ2.position_z_std = 0.0;
 }
 
 void ObstaclePublisher::fissionExample(double t) {
@@ -223,7 +236,15 @@ void ObstaclePublisher::fissionExample(double t) {
     reset();
 
   circ1.true_radius = circ1.radius;
+  circ1.radius_std = 0.0; // No standard deviation available
+  circ1.position_x_std = 0.0;
+  circ1.position_y_std = 0.0;
+  circ1.position_z_std = 0.0;
   circ2.true_radius = circ2.radius;
+  circ2.radius_std = 0.0; // No standard deviation 
+  circ2.position_x_std = 0.0;
+  circ2.position_y_std = 0.0;
+  circ2.position_z_std = 0.0;
 }
 
 void ObstaclePublisher::publishObstacles() {

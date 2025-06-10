@@ -63,7 +63,7 @@ def generate_launch_description():
                 'std_correspondence_dev': 0.15,
                 'process_variance': 0.1,
                 'process_rate_variance': 0.1,
-                'measurement_variance': 1.0,
+                'measurement_variance': 0.1,
                 'frame_id': 'map',  # Expects world frame input
                 'compensate_robot_velocity': False,  # Not needed since using world coordinates
                 'use_world_coordinates': True,  # NEW: Enable world coordinate tracking with agent output
@@ -76,3 +76,4 @@ def generate_launch_description():
             ]
         )
     ])
+
