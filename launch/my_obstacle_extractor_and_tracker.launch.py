@@ -28,25 +28,29 @@ def generate_launch_description():
                 'use_split_and_merge': True,
                 'circles_from_visibles': True,
                 'discard_converted_segments': True,
-                'transform_coordinates': True,
-                'use_world_frame': True,  # Enable world frame transformation
-                'min_group_points': 10,
-                'max_group_distance': 0.1,
-                'distance_proportion': 0.00628,
+                'transform_coordinates': False,
+                'use_world_frame': False,  # Enable world frame transformation
+                'min_group_points': 2,
+                'max_group_distance': 1.0,
+                'distance_proportion': 0.0175,
                 'max_split_distance': 0.2,
                 'max_merge_separation': 0.2,
                 'max_merge_spread': 0.2,
-                'max_circle_radius': 5.0,
+                'max_circle_radius': 20.0,
                 'radius_enlargement': 0.3,
+                'min_x_limit': -50.0,
+                'max_x_limit': 50.0,
+                'min_y_limit': -50.0,
+                'max_y_limit': 50.0,
                 'frame_id': 'lidar',
                 'use_sim_time': LaunchConfiguration('use_sim_time')
             }],
             
             remappings=[
-                ('scan', 'scan_fixed'),
+                ('scan', '/usv/lily/lidar/scan'),
                 ('pcl', '/ouster/scan'),
                 ('pcl2', '/ScanMergeNode/scan_merged'),
-                ('odom', '/model/agente/odometry'),  # Map odometry topic
+                ('odom', '/model/lily/odometry'),  # Map odometry topic properly
             ]
         ),
         
@@ -64,7 +68,7 @@ def generate_launch_description():
                 'process_variance': 0.1,
                 'process_rate_variance': 0.1,
                 'measurement_variance': 0.1,
-                'frame_id': 'map',  # Expects world frame input
+                'frame_id': 'lidar',  # Expects world frame input
                 'compensate_robot_velocity': False,  # Not needed since using world coordinates
                 'use_world_coordinates': True,  # NEW: Enable world coordinate tracking with agent output
                 'use_sim_time': LaunchConfiguration('use_sim_time')

@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Software License Agreement (BSD License)
  *
  * Copyright (c) 2017, Poznan University of Technology
@@ -57,6 +57,9 @@ ObstacleExtractor::ObstacleExtractor(std::shared_ptr<rclcpp::Node> nh, std::shar
   tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
   time_last_marker_published_ = nh_->get_clock()->now() - rclcpp::Duration(10, 0);
   initialize();
+
+  params_callback_handle_ = nh_->add_on_set_parameters_callback(
+      std::bind(&ObstacleExtractor::parametersCallback, this, std::placeholders::_1));
 }
 
 ObstacleExtractor::~ObstacleExtractor() {
@@ -158,6 +161,61 @@ void ObstacleExtractor::updateParams(const std::shared_ptr<rmw_request_id_t> req
                                      const std::shared_ptr<std_srvs::srv::Empty::Request> &req, 
                                      const std::shared_ptr<std_srvs::srv::Empty::Response> &res) {
   updateParamsUtil();
+}
+
+rcl_interfaces::msg::SetParametersResult ObstacleExtractor::parametersCallback(const std::vector<rclcpp::Parameter>& parameters) {
+  rcl_interfaces::msg::SetParametersResult result;
+  result.successful = true;
+  result.reason = "success";
+
+  for (const auto& param : parameters) {
+    if (param.get_name() == "active") {
+      p_active_ = param.as_bool();
+    } else if (param.get_name() == "use_scan") {
+      p_use_scan_ = param.as_bool();
+    } else if (param.get_name() == "use_pcl") {
+      p_use_pcl_ = param.as_bool();
+    } else if (param.get_name() == "use_pcl2") {
+      p_use_pcl_2_ = param.as_bool();
+    } else if (param.get_name() == "use_split_and_merge") {
+      p_use_split_and_merge_ = param.as_bool();
+    } else if (param.get_name() == "circles_from_visibles") {
+      p_circles_from_visibles_ = param.as_bool();
+    } else if (param.get_name() == "discard_converted_segments") {
+      p_discard_converted_segments_ = param.as_bool();
+    } else if (param.get_name() == "transform_coordinates") {
+      p_transform_coordinates_ = param.as_bool();
+    } else if (param.get_name() == "use_world_frame") {
+      p_use_world_frame_ = param.as_bool();
+    } else if (param.get_name() == "min_group_points") {
+      p_min_group_points_ = param.as_int();
+    } else if (param.get_name() == "max_group_distance") {
+      p_max_group_distance_ = param.as_double();
+    } else if (param.get_name() == "distance_proportion") {
+      p_distance_proportion_ = param.as_double();
+    } else if (param.get_name() == "max_split_distance") {
+      p_max_split_distance_ = param.as_double();
+    } else if (param.get_name() == "max_merge_separation") {
+      p_max_merge_separation_ = param.as_double();
+    } else if (param.get_name() == "max_merge_spread") {
+      p_max_merge_spread_ = param.as_double();
+    } else if (param.get_name() == "max_circle_radius") {
+      p_max_circle_radius_ = param.as_double();
+    } else if (param.get_name() == "radius_enlargement") {
+      p_radius_enlargement_ = param.as_double();
+    } else if (param.get_name() == "min_x_limit") {
+      p_min_x_limit_ = param.as_double();
+    } else if (param.get_name() == "max_x_limit") {
+      p_max_x_limit_ = param.as_double();
+    } else if (param.get_name() == "min_y_limit") {
+      p_min_y_limit_ = param.as_double();
+    } else if (param.get_name() == "max_y_limit") {
+      p_max_y_limit_ = param.as_double();
+    } else if (param.get_name() == "frame_id") {
+      p_frame_id_ = param.as_string();
+    }
+  }
+  return result;
 }
 
 void ObstacleExtractor::scanCallback(const sensor_msgs::msg::LaserScan& scan_msg) {

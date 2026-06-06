@@ -55,6 +55,8 @@ ObstacleTracker::ObstacleTracker(std::shared_ptr<rclcpp::Node> nh, std::shared_p
 
   timer_ = nh_->create_wall_timer(1000ms, std::bind(&ObstacleTracker::timerCallback, this));
   initialize();
+  params_callback_handle_ = nh_->add_on_set_parameters_callback(
+      std::bind(&ObstacleTracker::parametersCallback, this, std::placeholders::_1));
 }
 
 ObstacleTracker::~ObstacleTracker() {
@@ -137,6 +139,55 @@ void ObstacleTracker::updateParams(const std::shared_ptr<rmw_request_id_t> reque
                                      const std::shared_ptr<std_srvs::srv::Empty::Request> &req, 
                                      const std::shared_ptr<std_srvs::srv::Empty::Response> &res) {
   updateParamsUtil();
+}
+
+rcl_interfaces::msg::SetParametersResult ObstacleTracker::parametersCallback(const std::vector<rclcpp::Parameter>& parameters) {
+  rcl_interfaces::msg::SetParametersResult result;
+  result.successful = true;
+  result.reason = "success";
+
+  for (const auto& param : parameters) {
+    if (param.get_name() == "active") {
+      p_active_ = param.as_bool();
+    } else if (param.get_name() == "copy_segments") {
+      p_copy_segments_ = param.as_bool();
+    } else if (param.get_name() == "compensate_robot_velocity") {
+      p_compensate_robot_velocity_ = param.as_bool();
+    } else if (param.get_name() == "use_world_coordinates") {
+      p_use_world_coordinates_ = param.as_bool();
+    } else if (param.get_name() == "sensor_rate") {
+      p_sensor_rate_ = param.as_double();
+    } else if (param.get_name() == "loop_rate") {
+      p_loop_rate_ = param.as_double();
+    } else if (param.get_name() == "frame_id") {
+      p_frame_id_ = param.as_string();
+    } else if (param.get_name() == "tracking_duration") {
+      p_tracking_duration_ = param.as_double();
+    } else if (param.get_name() == "min_correspondence_cost") {
+      p_min_correspondence_cost_ = param.as_double();
+    } else if (param.get_name() == "std_correspondence_dev") {
+      p_std_correspondence_dev_ = param.as_double();
+    } else if (param.get_name() == "process_variance") {
+      p_process_variance_ = param.as_double();
+    } else if (param.get_name() == "process_rate_variance") {
+      p_process_rate_variance_ = param.as_double();
+    } else if (param.get_name() == "measurement_variance") {
+      p_measurement_variance_ = param.as_double();
+    }
+  }
+
+  p_sampling_time_ = 1.0 / p_loop_rate_;
+  TrackedCircleObstacle::setSamplingTime(p_sampling_time_);
+  TrackedCircleObstacle::setCounterSize(static_cast<int>(p_loop_rate_ * p_tracking_duration_));
+  TrackedCircleObstacle::setCovariances(p_process_variance_, p_process_rate_variance_, p_measurement_variance_);
+  TrackedSegmentObstacle::setSamplingTime(p_sampling_time_);
+  TrackedSegmentObstacle::setCounterSize(static_cast<int>(p_loop_rate_ * p_tracking_duration_));
+  TrackedSegmentObstacle::setCovariances(p_process_variance_, p_process_rate_variance_, p_measurement_variance_);
+
+  // Note: we don't recreate the timer or subscribers here to avoid complexity on simple tuning parameter changes,
+  // but tuning variables like costs and variances are updated immediately.
+  
+  return result;
 }
 
 void ObstacleTracker::timerCallback() {
